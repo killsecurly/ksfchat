@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CordDis</title>
+<link rel="icon" type="image/png" href="https://file.garden/Z43SqDt67TpUFO8v/retouch_2025031817385428.png">
+
+<style>
+  body { font-family: 'Segoe UI', sans-serif; background: #f5f7fa; color: #333; margin: 0; padding: 0; transition: 0.3s; }
+  .dark-mode { background: lightgreen; color: #f1f1f1; }
+  header { background: lightgreen; color: white; padding: 15px; text-align: center; font-size: 1.5em; font-weight: bold; }
+  header img { height: 90px; }
+  .container { max-width: 600px; margin: 20px auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  .dark-mode .container { background: #1e1e1e; box-shadow: 0 4px 12px rgba(255,255,255,0.05); }
+  button { background: #5865f2; border: none; color: white; padding: 10px 15px; border-radius: 8px; cursor: pointer; margin: 5px 0; transition: background 0.2s; }
+  button:hover { background: #4752c4; }
+  input { width: calc(100% - 20px); padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 8px; }
+  .chat-box { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; border-radius: 8px; background: #fafafa; margin-bottom: 10px; }
+  .dark-mode .chat-box { background: #2a2a2a; border-color: #444; }
+  .message { margin: 5px 0; padding: 8px 12px; border-radius: 8px; background: #e3e5eb; word-wrap: break-word; }
+  .dark-mode .message { background: #3a3a3a; }
+  .message strong { color: #5865f2; }
+  .message-time { font-size: 0.75em; color: grey; margin-left: 5px; }
+  .room-buttons button { margin-right: 5px; }
+  .chat-input { display: flex; gap: 8px; align-items: center; }
+  .chat-input input[type="text"] { flex-grow: 1; }
+  .chat-input #imageUpload { display: none; }
+  .message img { max-width: 100%; border-radius: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Securly_logo_2020.svg/1280px-Securly_logo_2020.svg.png" alt="Logo">
+</header>
+
+<div class="container" id="loginDiv">
+  <h2>503 Forbidden</h2>
+  <input type="text" id="nameInput" placeholder="Input Error Code">
+  <button onclick="setName()">Submit</button><br>
+  <p style="font-size: 15px">Return to <a href="https://securly.com">securly.com</a></p>
+  <p style="font-size: 10px">If you're still having problems, please email support instead.<br>Error: 503 Forbidden - Error Code X30GLA198</p>
+</div>
+
+<div class="container" id="chatDiv" style="display:none;">
+  <div class="room-buttons">
+    <button onclick="switchRoom('general')">General</button>
+    <button onclick="switchRoom('memes')">Memes</button>
+    <button onclick="switchRoom('school')">School stuff</button>
+    <button onclick="switchRoom('Rules')">Rules</button>
+  </div>
+  <div class="chat-box" id="chatBox"></div>
+  <div class="chat-input">
+    <input type="text" id="messageInput" placeholder="Type a message (max 50 chars)" maxlength="50">
+    <input type="file" id="imageUpload" accept="image/*" onchange="sendImage()">
+    <button id="imageButton" style="display:none;" onclick="document.getElementById('imageUpload').click()">🖼️</button>
+    <button onclick="sendMessage()">Send</button>
+  </div>
+  <button onclick="toggleDarkMode()">🌙 Toggle Dark Mode</button>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-analytics.js";
+import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+
+// Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyAGmqJP-WaEEzGYxHZwLXeJiRYz7sVsob8",
+  authDomain: "clicker-6f54c.firebaseapp.com",
+  databaseURL: "https://clicker-6f54c-default-rtdb.firebaseio.com",
+  projectId: "clicker-6f54c",
+  storageBucket: "clicker-6f54c.firebasestorage.app",
+  messagingSenderId: "127912342772",
+  appId: "1:127912342772:web:4781619e3978799f33daa1",
+  measurementId: "G-DK392Y7PZ1"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const db = getFirestore(app);
+
+let currentRoom = 'general';
+let currentUser;
+
+// Cookie helpers
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp('(^| )'+name+'=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+function setCookie(name, value, days) {
+  let expires = "";
+  if(days){
+    const date = new Date();
+    date.setTime(date.getTime()+(days*24*60*60*1000));
+    expires = "; expires="+date.toUTCString();
+  }
+  document.cookie = name+"="+encodeURIComponent(value)+expires+"; path=/";
+}
+
+// Global functions
+window.setName = function() {
+  const name = document.getElementById('nameInput').value.trim();
+  if(!name) return alert("Please enter a name.");
+  currentUser = { displayName: name };
+  setCookie("chatName", name, 365);
+  document.getElementById('loginDiv').style.display='none';
+  document.getElementById('chatDiv').style.display='block';
+  loadMessages();
+};
+
+window.sendMessage = function() {
+  if (!currentUser) return;
+  const msgInput = document.getElementById('messageInput');
+  let text = msgInput.value.trim();
+  if(!text) return;
+  if(text.length>50){ alert("Message max 50 characters."); return; }
+  addDoc(collection(db,currentRoom),{
+    text: text,
+    user: currentUser.displayName,
+    timestamp: new Date()
+  });
+  msgInput.value='';
+};
+
+// Send message on Enter key
+document.getElementById('messageInput').addEventListener('keypress', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault(); // prevent newline
+    sendMessage();
+  }
+});
+
+window.loadMessages = function() {
+  const chatBox = document.getElementById('chatBox');
+  chatBox.innerHTML='';
+  onSnapshot(collection(db,currentRoom), snapshot=>{
+    chatBox.innerHTML='';
+    const messages = snapshot.docs.map(doc=>doc.data());
+    messages.sort((a,b)=>a.timestamp - b.timestamp);
+    messages.forEach(message=>{
+      let div = document.createElement('div');
+      div.classList.add('message');
+      let msgTime = message.timestamp?.seconds ? new Date(message.timestamp.seconds*1000).toLocaleTimeString() : new Date(message.timestamp).toLocaleTimeString();
+      if(message.text){
+        div.innerHTML=`<strong>${message.user}</strong>: ${message.text} <span class="message-time">(${msgTime})</span>`;
+      } else if(message.image){
+        div.innerHTML=`<strong>${message.user}</strong>: <img src="${message.image}" /> <span class="message-time">(${msgTime})</span>`;
+      }
+      chatBox.appendChild(div);
+    });
+    chatBox.scrollTop = chatBox.scrollHeight;
+  });
+};
+
+window.switchRoom = function(room){
+  currentRoom = room;
+  document.getElementById('imageButton').style.display=(room==='memes')?'inline-block':'none';
+  loadMessages();
+};
+
+window.toggleDarkMode = function(){ document.body.classList.toggle('dark-mode'); };
+
+// Image sending (Base64)
+window.sendImage = function() {
+  if (!currentUser) return;
+  const fileInput = document.getElementById('imageUpload');
+  if (!fileInput.files.length) return;
+  const file = fileInput.files[0];
+  
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const base64 = e.target.result; // Base64 string
+    
+    addDoc(collection(db,currentRoom),{
+      image: base64,
+      user: currentUser.displayName,
+      timestamp: new Date()
+    });
+    
+    fileInput.value = '';
+  };
+  reader.readAsDataURL(file);
+};
+
+// Auto login if cookie exists
+const savedName = getCookie("chatName");
+if(savedName){
+  currentUser = { displayName: savedName };
+  document.getElementById('loginDiv').style.display='none';
+  document.getElementById('chatDiv').style.display='block';
+  loadMessages();
+}
+</script>
+</body>
+</html>
